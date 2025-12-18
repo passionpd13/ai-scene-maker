@@ -73,13 +73,13 @@ def generate_section(client, section_title, full_structure, duration_type="fixed
     
     # 1. 분량에 따른 글자수 및 지침 설정
     if duration_type == "2min":
-        target_chars = "약 1,100자 (공백 포함)"
+        target_chars = "약 1,000자 (공백 포함)"
         detail_level = "핵심 내용 위주로 명확하게 전달하되, 너무 짧지 않게 서술하십시오."
     elif duration_type == "3min":
-        target_chars = "약 1,600자 (공백 포함)"
+        target_chars = "약 1,500자 (공백 포함)"
         detail_level = "충분한 예시와 설명을 곁들여 상세하게 서술하십시오."
     elif duration_type == "4min":
-        target_chars = "약 2,100자 이상 (공백 포함)"
+        target_chars = "약 2,000자 이상 (공백 포함)"
         detail_level = "현미경으로 들여다보듯 아주 깊이 있고 디테일하게 묘사하십시오. 절대 요약하지 마십시오."
     else: # Intro / Epilogue (Fixed)
         target_chars = "약 400단어 (약 1,400자)"
@@ -118,6 +118,7 @@ def generate_section(client, section_title, full_structure, duration_type="fixed
     4. 서두에 "네, 알겠습니다" 같은 잡담을 하지 말고 바로 대본 내용을 시작하세요.
     5. "영문 병기(English parallel notation)는 생략해 주세요." "영문 병기는 삭제해 주세요." "스크립트 작성할 때 '빅휠(Big Wheel)'처럼 괄호 넣지 말고, 그냥 깔끔하게 '빅휠'로 한글만 표기해 줘."
     6. 쉼표와 접속어 등을 사용하여, 리듬이 있지만 너무 끊기지 않는 흐름을 만들 것
+    7. 대본에는 챕터 표시를 하지 않는다.
 
     [Output]
     (지금 바로 {section_title}의 원고를 작성 시작하세요)
@@ -777,6 +778,7 @@ if st.session_state['generated_results']:
                     with open(item['path'], "rb") as file:
                         st.download_button("⬇️ 저장", data=file, file_name=item['filename'], mime="image/png", key=f"btn_down_{item['scene']}")
                 except: st.error("파일 오류")
+
 
 
 
