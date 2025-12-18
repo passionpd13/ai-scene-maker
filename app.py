@@ -15,7 +15,7 @@ from google.genai import types
 # ==========================================
 # [설정] 페이지 기본 설정
 # ==========================================
-st.set_page_config(page_title="AI 유튜브 롱폼 제작기 (Pro)", layout="wide", page_icon="🎬")
+st.set_page_config(page_title="열정피디 AI 유튜브 대본 구조 분석기 (Pro)", layout="wide", page_icon="🎬")
 
 # 파일 저장 경로 설정
 BASE_PATH = "./web_result_files"
@@ -777,3 +777,4 @@ if st.session_state['generated_results']:
                     with open(item['path'], "rb") as file:
                         st.download_button("⬇️ 저장", data=file, file_name=item['filename'], mime="image/png", key=f"btn_down_{item['scene']}")
                 except: st.error("파일 오류")
+
