@@ -15,15 +15,14 @@ from google.genai import types
 # ==========================================
 # [설정] 페이지 기본 설정
 # ==========================================
-st.set_page_config(page_title="AI 영상 씬 생성기 (Preview)", layout="wide", page_icon="🎬")
+st.set_page_config(page_title="AI 영상 씬 생성기 (Pro)", layout="wide", page_icon="🎬")
 
 # 파일 저장 경로 설정
 BASE_PATH = "./web_result_files"
 IMAGE_OUTPUT_DIR = os.path.join(BASE_PATH, "output_images")
 
-# ★★★ 사용자님이 사용하시는 프리뷰 모델명 ★★★
+# 텍스트 모델은 고정 (가장 성능 좋은 것)
 GEMINI_TEXT_MODEL_NAME = "gemini-2.5-pro"
-GEMINI_IMAGE_MODEL_NAME = "gemini-3-pro-image-preview"
 
 # ==========================================
 # [함수] 로직 처리
@@ -40,22 +39,17 @@ def init_folders():
 
 def split_script_by_time(script, chars_per_chunk=100):
     """대본 분할 로직"""
-    # 문장 단위로 먼저 나눔 (. ? ! 뒤에서)
     temp_sentences = script.replace(".", ".|").replace("?", "?|").replace("!", "!|").split("|")
     chunks = []
     current_chunk = ""
     for sentence in temp_sentences:
         sentence = sentence.strip()
         if not sentence: continue
-        
-        # 현재 덩어리에 문장을 더했을 때 제한 길이를 넘지 않으면 추가
         if len(current_chunk) + len(sentence) < chars_per_chunk:
             current_chunk += " " + sentence
         else:
-            # 넘으면 지금까지 모은걸 저장하고 새로 시작
             chunks.append(current_chunk.strip())
             current_chunk = sentence
-            
     if current_chunk:
         chunks.append(current_chunk.strip())
     return chunks
@@ -115,12 +109,13 @@ def generate_prompt(api_key, index, text_chunk, style_instruction):
     except Exception as e:
         return (scene_num, f"Error: {e}")
 
-def generate_image(client, prompt, filename, output_dir):
-    """이미지 생성 함수 (gemini-3-pro-image-preview 용)"""
+def generate_image(client, prompt, filename, output_dir, selected_model_name):
+    """이미지 생성 함수 (선택된 모델 사용)"""
     full_path = os.path.join(output_dir, filename)
     try:
+        # 선택된 모델명(selected_model_name)을 사용하여 호출
         response = client.models.generate_content(
-            model=GEMINI_IMAGE_MODEL_NAME,
+            model=selected_model_name,
             contents=[prompt],
             config=types.GenerateContentConfig(
                 image_config=types.ImageConfig(aspect_ratio="16:9")
@@ -152,7 +147,7 @@ def create_zip_buffer(source_dir):
     return buffer
 
 # ==========================================
-# [UI] 사이드바
+# [UI] 사이드바 설정 영역
 # ==========================================
 with st.sidebar:
     st.header("⚙️ 환경 설정")
@@ -161,19 +156,28 @@ with st.sidebar:
     
     st.markdown("---")
 
-    # ★★★ [추가된 기능] 시간 단위 설정 ★★★
-    st.subheader("⏱️ 장면 분할 설정")
-    chunk_duration = st.slider(
-        "한 장면당 지속 시간 (초 단위)", 
-        min_value=10, 
-        max_value=60, 
-        value=20, 
-        step=5,
-        help="대본을 몇 초 분량으로 자를지 선택하세요. (1초 ≈ 약 8글자로 계산)"
+    # ★★★ [추가] 이미지 모델 선택 버튼 ★★★
+    st.subheader("🖼️ 이미지 모델 선택")
+    model_choice = st.radio(
+        "사용할 AI 모델을 선택하세요:",
+        ("Premium (Gemini 3 Pro)", "Fast (Gemini 2.5 Flash)"),
+        index=0 # 기본값: 3 Pro
     )
-    # 계산된 글자 수 보여주기
-    estimated_chars = chunk_duration * 8 
-    st.caption(f"💡 선택한 {chunk_duration}초는 약 **{estimated_chars}글자** 분량입니다.")
+
+    # 선택에 따라 모델명 변수 설정
+    if "Gemini 3 Pro" in model_choice:
+        SELECTED_IMAGE_MODEL = "gemini-3-pro-image-preview"
+    else:
+        SELECTED_IMAGE_MODEL = "gemini-2.5-flash-image"
+        
+    st.info(f"✅ 현재 선택된 모델:\n`{SELECTED_IMAGE_MODEL}`")
+
+    st.markdown("---")
+
+    st.subheader("⏱️ 장면 분할 설정")
+    chunk_duration = st.slider("한 장면당 지속 시간 (초)", 10, 60, 20, 5)
+    chars_limit = chunk_duration * 8 
+    st.caption(f"약 **{chars_limit}글자** 단위로 분할됩니다.")
 
     st.markdown("---")
     
@@ -192,8 +196,8 @@ with st.sidebar:
 # ==========================================
 # [UI] 메인 화면
 # ==========================================
-st.title("🎬 AI 대본 시각화 도구 (Preview Mode)")
-st.caption(f"🔧 Model: {GEMINI_TEXT_MODEL_NAME} + {GEMINI_IMAGE_MODEL_NAME}")
+st.title("🎬 AI 대본 시각화 도구 (Pro)")
+st.caption(f"🔧 Text: {GEMINI_TEXT_MODEL_NAME} | 🎨 Image: {SELECTED_IMAGE_MODEL}")
 
 script_input = st.text_area("📜 대본을 입력하세요", height=200, placeholder="대본 붙여넣기...")
 
@@ -219,11 +223,8 @@ if start_btn:
         status_box = st.status("작업 진행 중...", expanded=True)
         progress_bar = st.progress(0)
         
-        # 1. 대본 분할 (시간 기반 계산 적용)
-        # ★★★ 수정된 부분: 계산된 글자 수를 넘겨줍니다 ★★★
-        chars_limit = chunk_duration * 8  # 1초당 8글자로 가정
-        
-        status_box.write(f"✂️ 대본 분할 중 ({chunk_duration}초 / 약 {chars_limit}자 단위)...")
+        # 1. 대본 분할
+        status_box.write(f"✂️ 대본 분할 중...")
         chunks = split_script_by_time(script_input, chars_per_chunk=chars_limit)
         total_scenes = len(chunks)
         status_box.write(f"✅ {total_scenes}개 장면으로 분할 완료.")
@@ -242,8 +243,8 @@ if start_btn:
         
         prompts.sort(key=lambda x: x[0])
         
-        # 3. 이미지 생성
-        status_box.write(f"🎨 이미지 생성 중 ({GEMINI_IMAGE_MODEL_NAME})...")
+        # 3. 이미지 생성 (선택된 모델 사용)
+        status_box.write(f"🎨 이미지 생성 중 ({SELECTED_IMAGE_MODEL})...")
         results = []
         
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -253,7 +254,8 @@ if start_btn:
                 orig_text = chunks[idx]
                 fname = make_filename(s_num, orig_text)
                 
-                future = executor.submit(generate_image, client, prompt_text, fname, IMAGE_OUTPUT_DIR)
+                # ★ generate_image 함수에 SELECTED_IMAGE_MODEL 전달
+                future = executor.submit(generate_image, client, prompt_text, fname, IMAGE_OUTPUT_DIR, SELECTED_IMAGE_MODEL)
                 future_to_meta[future] = (s_num, fname, orig_text, prompt_text)
             
             completed_cnt = 0
@@ -287,43 +289,38 @@ if st.session_state['generated_results']:
     with col1:
         st.header(f"📸 결과물 ({len(st.session_state['generated_results'])}장)")
     with col2:
-        # [기능 1] 전체 ZIP 다운로드 버튼
         zip_data = create_zip_buffer(IMAGE_OUTPUT_DIR)
         st.download_button(
-            label="📦 전체 이미지 ZIP 다운로드",
+            label="📦 전체 ZIP 다운로드",
             data=zip_data,
             file_name="all_images.zip",
             mime="application/zip",
             use_container_width=True
         )
     
-    # [기능 2] 리스트 뷰 & 개별 다운로드 버튼
     for item in st.session_state['generated_results']:
         with st.container(border=True):
             cols = st.columns([1, 2])
             
-            # 왼쪽: 이미지
             with cols[0]:
                 try:
                     st.image(item['path'], use_container_width=True)
                 except:
                     st.error("이미지 없음")
             
-            # 오른쪽: 정보 및 다운로드 버튼
             with cols[1]:
                 st.subheader(f"Scene {item['scene']:02d}")
                 st.caption(f"파일명: {item['filename']}")
                 st.write(f"**대본:** {item['script']}")
                 
-                # ★ 개별 다운로드 버튼
                 try:
                     with open(item['path'], "rb") as file:
                         btn = st.download_button(
-                            label="⬇️ 이 이미지 저장",
+                            label="⬇️ 저장",
                             data=file,
                             file_name=item['filename'],
                             mime="image/png",
                             key=f"btn_down_{item['scene']}"
                         )
-                except Exception as e:
-                    st.error("파일 읽기 오류")
+                except Exception:
+                    st.error("파일 오류")
