@@ -294,7 +294,7 @@ with st.sidebar:
 # ==========================================
 # [UI] 메인 화면 1: 대본 구조화 및 생성
 # ==========================================
-st.title("📺 열정피디 AI 유튜브 대본 구조 분석기 (Pro)")
+st.title("📺 AI 유튜브 대본 구조 분석기 (Pro)")
 st.caption("구조 분석 ➡️ 롱폼 대본 생성(병렬 처리) ➡️ 이미지 생성까지 한번에!")
 
 # 세션 초기화
@@ -777,5 +777,6 @@ if st.session_state['generated_results']:
                     with open(item['path'], "rb") as file:
                         st.download_button("⬇️ 저장", data=file, file_name=item['filename'], mime="image/png", key=f"btn_down_{item['scene']}")
                 except: st.error("파일 오류")
+
 
 
