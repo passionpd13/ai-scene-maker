@@ -63,11 +63,12 @@ def generate_structure(client, full_script):
         return f"Error: {e}"
 
 # ==========================================
-# [함수] 2. 섹션별 대본 생성 (병렬/개별 공용)
+# [함수] 2. 섹션별 대본 생성 (지침 기능 추가됨)
 # ==========================================
-def generate_section(client, section_title, full_structure, duration_type="fixed"):
+def generate_section(client, section_title, full_structure, duration_type="fixed", custom_instruction=""):
     """
-    duration_type: '2min', '3min', '4min', 'fixed'(Intro/Epilogue용)
+    duration_type: '2min', '3min', '4min', 'fixed'
+    custom_instruction: 사용자가 입력한 추가 지침 (톤앤매너 등)
     """
     
     # 1. 분량에 따른 글자수 및 지침 설정
@@ -84,6 +85,15 @@ def generate_section(client, section_title, full_structure, duration_type="fixed
         target_chars = "약 400단어 (약 1,400자)"
         detail_level = "시청자를 사로잡는 강력한 후킹과 여운을 주는 마무리로 작성하십시오. 안녕 인사는 하지 않는다"
 
+    # [사용자 지침 반영]
+    user_guide_prompt = ""
+    if custom_instruction:
+        user_guide_prompt = f"""
+    [User's Special Direction]
+    The user has provided specific instructions for the tone/style. You MUST follow this:
+    👉 "{custom_instruction}"
+        """
+
     prompt = f"""
     [Role]
     당신은 대한민국 최고의 유튜브 다큐멘터리 작가입니다.
@@ -93,6 +103,7 @@ def generate_section(client, section_title, full_structure, duration_type="fixed
     
     [Context (Overall Structure)]
     {full_structure}
+    {user_guide_prompt}
 
     [Target Section]
     **{section_title}**
@@ -101,14 +112,12 @@ def generate_section(client, section_title, full_structure, duration_type="fixed
     - **목표 분량: {target_chars}** - **작성 지침:** {detail_level}
     
     [Style Guidelines]
-    1. '습니다' 체를 사용하고, 다큐멘터리 특유의 진지하고 몰입감 있는 어조를 유지하세요.
+    1. '습니다' 체를 사용하고, 다큐멘터리 특유의 진지하고 몰입감 있는 어조를 유지하세요. (단, [User's Special Direction]이 있다면 그것을 우선시하세요.)
     2. 앞뒤 문맥(이전 챕터, 다음 챕터)을 고려하되, 이 파트의 내용에만 집중하세요.
     3. (지문), (효과음) 같은 연출 지시어는 제외하고 **오직 나레이션 대사만** 출력하세요.
     4. 서두에 "네, 알겠습니다" 같은 잡담을 하지 말고 바로 대본 내용을 시작하세요.
     5. "영문 병기(English parallel notation)는 생략해 주세요." "영문 병기는 삭제해 주세요." "스크립트 작성할 때 '빅휠(Big Wheel)'처럼 괄호 넣지 말고, 그냥 깔끔하게 '빅휠'로 한글만 표기해 줘."
     6. 쉼표와 접속어 등을 사용하여, 리듬이 있지만 너무 끊기지 않는 흐름을 만들 것
-       ❌ "당신은 말에 묶입니다. 말이 달립니다. 살점이 찢깁니다." 이렇게 문장을 너무 짧게 하지 말것
-       ✅ "당신은 말의 뒷다리에 포박된 채 끌려가며, 돌과 자갈 위를 미끄러지듯 지나가다 결국 살점이 찢기고 뼈가 드러납니다."
 
     [Output]
     (지금 바로 {section_title}의 원고를 작성 시작하세요)
@@ -171,13 +180,11 @@ def make_filename(scene_num, text_chunk):
     filename = f"S{scene_num:03d}_{summary}.png"
     return filename
 
-# [중요 수정] 전체 제목(video_title)을 인자로 받도록 수정
 def generate_prompt(api_key, index, text_chunk, style_instruction, video_title):
     scene_num = index + 1
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_TEXT_MODEL_NAME}:generateContent?key={api_key}"
     headers = {'Content-Type': 'application/json'}
 
-    # [중요 수정] 프롬프트 상단에 전체 제목을 맥락으로 제공
     full_instruction = f"""
     [Role]
     You are an expert AI art director.
@@ -219,7 +226,6 @@ def generate_prompt(api_key, index, text_chunk, style_instruction, video_title):
 def generate_image(client, prompt, filename, output_dir, selected_model_name):
     full_path = os.path.join(output_dir, filename)
     try:
-        # [사용자 요청] Gemini 이미지 생성 Config 사용
         response = client.models.generate_content(
             model=selected_model_name,
             contents=[prompt],
@@ -259,7 +265,6 @@ with st.sidebar:
     st.markdown("---")
     
     st.subheader("🖼️ 이미지 모델 선택")
-    # [사용자 지정 로직 적용]
     model_choice = st.radio("사용할 AI 모델:", ("Premium (Gemini 3 Pro)", "Fast (Gemini 2.5 Flash)"), index=0)
     
     if "Gemini 3 Pro" in model_choice:
@@ -297,12 +302,21 @@ if 'structured_content' not in st.session_state:
     st.session_state['structured_content'] = None
 if 'section_scripts' not in st.session_state:
     st.session_state['section_scripts'] = {}
-# [신규] 영상 제목 저장을 위한 세션 변수
 if 'video_title' not in st.session_state:
     st.session_state['video_title'] = ""
+# [신규] 사용자가 처음에 입력한 제목 저장용
+if 'user_initial_title' not in st.session_state:
+    st.session_state['user_initial_title'] = ""
 
 # 1. 구조 분석 섹션
 with st.container(border=True):
+    # [신규] 제목 입력창 추가 (선택사항)
+    user_title_input = st.text_input(
+        "📌 영상 제목 (선택사항)", 
+        placeholder="이 제목을 입력하면 나중에 이미지 생성 단계에서 이와 유사한 제목들을 추천받을 수 있습니다.",
+        help="비워두면 대본 내용을 바탕으로 AI가 알아서 제목을 추천합니다."
+    )
+
     raw_script = st.text_area("✍️ 분석할 원고(대본)를 여기에 붙여넣으세요:", height=200, placeholder="안녕하세요, 오늘은...")
     analyze_btn = st.button("🔍 구조 분석 실행", width="stretch", type="primary")
 
@@ -312,6 +326,9 @@ with st.container(border=True):
         elif not raw_script:
             st.warning("⚠️ 분석할 대본 내용이 없습니다.")
         else:
+            # [중요] 사용자가 입력한 제목을 세션에 저장
+            st.session_state['user_initial_title'] = user_title_input
+
             client = genai.Client(api_key=api_key)
             with st.status("대본 내용 분석 중...", expanded=True) as status:
                 status.write(f"🧠 Gemini가 내용을 읽고 구조를 잡고 있습니다...")
@@ -320,17 +337,15 @@ with st.container(border=True):
                 st.session_state['structured_content'] = result_text
                 st.session_state['section_scripts'] = {} # 구조 바뀌면 대본 초기화
 
-                # [중요] 구조 분석 결과에서 제목 추출 시도 (정규표현식)
-                # 예: "1. **Video Theme/Title**: 실제 제목 내용" 형식 찾기
-                title_match = re.search(r'^\s*1\.\s*\*\*(.*?)\*\*:\s*(.*)', result_text, re.MULTILINE)
-                if title_match:
-                    # 콜론 뒤의 내용이 있으면 그것을, 없으면 괄호 안의 내용을 제목으로 사용
-                    extracted_title = title_match.group(2).strip() if title_match.group(2).strip() else title_match.group(1).strip()
-                    # 혹시 모를 괄호 설명 제거
-                    extracted_title = re.sub(r'\(.*?\)', '', extracted_title).strip()
-                    st.session_state['video_title'] = extracted_title
+                # 제목 자동 추출 로직 (분석 결과에서 추출 시도)
+                import re
+                match = re.search(r'^\s*1\.\s*\*\*(.*?)\*\*:\s*(.*)', result_text, re.MULTILINE)
+                if match:
+                    extracted = match.group(2).strip() if match.group(2).strip() else match.group(1).strip()
+                    st.session_state['video_title'] = re.sub(r'\(.*?\)', '', extracted).strip()
                 else:
-                    st.session_state['video_title'] = "제목을 찾을 수 없음 (직접 입력해주세요)"
+                    # 추출 실패 시 사용자가 입력한 제목이 있으면 그걸 쓰고, 없으면 제목 없음 처리
+                    st.session_state['video_title'] = user_title_input if user_title_input else "제목을 찾을 수 없음"
 
                 status.update(label="✅ 분석 완료! 제목이 추출되었습니다.", state="complete", expanded=False)
 
@@ -340,7 +355,6 @@ if st.session_state['structured_content']:
     st.subheader("📑 대본 구조화 결과")
     st.markdown(st.session_state['structured_content'])
     
-    # [신규] 추출된 제목 확인 및 수정 UI
     st.info(f"📌 **추출된 영상 제목:** {st.session_state['video_title']} (이미지 생성 단계에서 수정 가능)")
 
     st.divider()
@@ -365,6 +379,13 @@ if st.session_state['structured_content']:
 
     # 일괄 생성 패널
     with st.container(border=True):
+        # [신규] 전체 지침 입력창
+        batch_instruction = st.text_area(
+            "📢 전체 대본 작성 지침 (선택 사항)", 
+            placeholder="예: 아주 비판적인 어조로 써줘 / 초등학생도 이해하기 쉽게 비유를 많이 들어줘 / 반말(평어)로 작성해줘 등",
+            height=70
+        )
+
         col_batch1, col_batch2 = st.columns([1, 1])
         with col_batch1:
             target_time = st.radio(
@@ -379,6 +400,7 @@ if st.session_state['structured_content']:
         with col_batch2:
             st.write("")
             st.write("") 
+            st.write("") 
             batch_btn = st.button("🚀 전체 대본 동시 생성 시작", type="primary", use_container_width=True)
 
     if batch_btn:
@@ -386,7 +408,7 @@ if st.session_state['structured_content']:
             st.error("⚠️ API Key가 필요합니다.")
         else:
             client = genai.Client(api_key=api_key)
-            status_box = st.status("🚀 AI가 모든 챕터를 동시에 작성 중입니다...", expanded=True)
+            status_box = st.status("🚀 AI가 지침을 반영하여 모든 챕터를 작성 중입니다...", expanded=True)
             progress_bar = status_box.progress(0)
             
             total_tasks = len(chapter_titles)
@@ -397,7 +419,16 @@ if st.session_state['structured_content']:
                 for title in chapter_titles:
                     is_fixed = any(x in title for x in ["Intro", "Epilogue", "도입부", "결론"])
                     current_duration = "fixed" if is_fixed else batch_duration_type
-                    future = executor.submit(generate_section, client, title, st.session_state['structured_content'], current_duration)
+                    
+                    # 지침 전달
+                    future = executor.submit(
+                        generate_section, 
+                        client, 
+                        title, 
+                        st.session_state['structured_content'], 
+                        current_duration, 
+                        batch_instruction
+                    )
                     future_to_title[future] = title
                 
                 for future in as_completed(future_to_title):
@@ -428,6 +459,7 @@ if st.session_state['structured_content']:
                 if st.button(f"🔄 {title} 다시 생성", key=f"r_fix_{title}"):
                     client = genai.Client(api_key=api_key)
                     with st.spinner("재생성 중..."):
+                        # 재생성 시에는 기본값(지침 없음) or 필요시 수정 가능
                         result = generate_section(client, title, st.session_state['structured_content'], "fixed")
                         st.session_state['section_scripts'][title] = result
                         st.session_state[f"txt_{title}"] = result 
@@ -468,35 +500,156 @@ if st.session_state['structured_content']:
         st.text_area("아래 내용을 복사하거나 위 버튼을 눌러 저장하세요", value=full_combined_script, height=500)
 
 # ==========================================
-# [UI] 메인 화면 3: 이미지 생성
+# [수정된 UI] 메인 화면 3: 이미지 생성 (AI 제목 추천 기능)
 # ==========================================
 st.divider()
 st.title("🎬 AI 씬(장면) 생성기 (Pro)")
 st.caption(f"완성된 대본을 넣으면 장면별 이미지를 생성합니다. | 🎨 Model: {SELECTED_IMAGE_MODEL}")
 
-# [중요 추가] 전체 영상 제목 입력/수정란
 st.subheader("📌 전체 영상 테마(제목) 설정")
-st.caption("이미지 생성 시 이 제목이 '전체적인 분위기 기준'이 됩니다. 필요하면 수정하세요.")
-video_title_input = st.text_input(
-    "영상 제목 (여기에 입력된 내용이 프롬프트의 기준이 됩니다)",
-    value=st.session_state['video_title'], # 구조 분석에서 추출한 값이 기본값
-    key="video_title_input_field"
-)
-# 입력된 값을 세션에 업데이트
-st.session_state['video_title'] = video_title_input
+st.caption("이미지 생성 시 이 제목이 '전체적인 분위기 기준'이 됩니다.")
 
+# 제목 추천 결과 저장용 세션
+if 'title_candidates' not in st.session_state:
+    st.session_state['title_candidates'] = []
 
-# 대본 자동 분류 및 가져오기 기능
+col_title_input, col_title_btn = st.columns([4, 1])
+
+with col_title_btn:
+    st.write("") 
+    st.write("") 
+    # [변경] 단순 가져오기가 아니라 '추천받기'로 변경 (입력값 유무에 따라 로직 분기)
+    if st.button("💡 제목 5개 추천", help="입력한 제목이 있다면 그것과 비슷하게, 없다면 대본 기반으로 추천합니다.", use_container_width=True):
+        if not api_key:
+            st.error("API Key 필요")
+        elif not st.session_state.get('structured_content'):
+            st.warning("먼저 '구조 분석'을 실행하세요.")
+        else:
+            client = genai.Client(api_key=api_key)
+            with st.spinner("AI가 최적의 제목을 고민 중입니다..."):
+                
+                # [핵심 로직] 사용자가 처음에 입력한 제목이 있는지 확인
+                user_input_title = st.session_state.get('user_initial_title', '').strip()
+                
+                if user_input_title:
+                    # Case A: 사용자가 입력한 제목이 있는 경우 -> 변형 추천
+                    prompt_instruction = f"""
+                    [Target Title]
+                    "{user_input_title}"
+
+                    [Task]
+                    The user wants to use a title VERY similar to the [Target Title] above.
+                    Generate 5 variations of this title that have the same meaning and nuance but use slightly different catchy words for YouTube.
+                    Do not change the core topic.
+                    """
+                else:
+                    # Case B: 입력한 제목이 없는 경우 -> 대본 기반 창작 추천
+                    prompt_instruction = f"""
+                    [Task]
+                    Read the provided script structure below and generate 5 catchy, clickable YouTube video titles in Korean.
+                    Create the best titles that summarize the content well.
+                    """
+
+                # 공통 프롬프트 조립
+                title_prompt = f"""
+                [Role]
+                You are a YouTube viral marketing expert.
+                
+                {prompt_instruction}
+                
+                [Script Context]
+                {st.session_state['structured_content']}
+                
+                [Output Format]
+                - Output ONLY the list of 5 titles.
+                - No numbering (1., 2.), just 5 lines of text.
+                - Language: Korean
+                """
+                
+                try:
+                    resp = client.models.generate_content(
+                        model=GEMINI_TEXT_MODEL_NAME, 
+                        contents=title_prompt
+                    )
+                    # 결과 줄바꿈으로 분리해서 리스트로 저장
+                    candidates = [line.strip() for line in resp.text.split('\n') if line.strip()]
+                    # 혹시 모를 번호/특수문자 제거
+                    clean_candidates = []
+                    import re
+                    for c in candidates:
+                        clean = re.sub(r'^\d+\.\s*', '', c).replace('*', '').replace('"', '').strip()
+                        if clean: clean_candidates.append(clean)
+                    
+                    st.session_state['title_candidates'] = clean_candidates[:5] # 최대 5개
+                except Exception as e:
+                    st.error(f"오류 발생: {e}")
+
+with col_title_input:
+    # [수정] 경고창 해결을 위한 상태 동기화 로직
+    
+    # 1. 위젯의 Key가 세션에 아직 없으면, 현재 저장된 제목('video_title')으로 초기화
+    if 'video_title_input_field' not in st.session_state:
+        st.session_state['video_title_input_field'] = st.session_state.get('video_title', "")
+    
+    # 2. 외부(구조 분석 등)에서 'video_title'이 변경되었는데, 위젯 Key에는 반영이 안 된 경우 강제 동기화
+    if st.session_state.get('video_title') != st.session_state.get('video_title_input_field'):
+         st.session_state['video_title_input_field'] = st.session_state.get('video_title', "")
+
+    # 3. text_input 생성 시 'value' 파라미터를 삭제합니다. (Key가 값을 관리하므로 충돌 방지)
+    video_title_input = st.text_input(
+        "영상 제목 (직접 입력하거나 우측 버튼으로 추천받으세요)",
+        key="video_title_input_field" 
+    )
+    
+    # 4. 사용자가 입력한 값을 다시 메인 변수에 저장
+    st.session_state['video_title'] = video_title_input
+
+# [신규] 추천된 제목들이 있으면 선택 버튼 표시
+if st.session_state['title_candidates']:
+    st.info("👇 AI가 추천한 제목입니다. 마음에 드는 것을 클릭하면 적용됩니다.")
+
+    # [중요] 콜백 함수 정의: 버튼 클릭 시 실행될 함수
+    def apply_title(new_title):
+        st.session_state['video_title'] = new_title
+        st.session_state['video_title_input_field'] = new_title
+        st.session_state['title_candidates'] = []
+
+    # 5개의 버튼을 보기 좋게 배치
+    for idx, title in enumerate(st.session_state['title_candidates']):
+        col_c1, col_c2 = st.columns([4, 1])
+        with col_c1:
+            st.markdown(f"**{idx+1}. {title}**")
+        with col_c2:
+            # [수정] button 안에 on_click 파라미터 사용
+            # args=(title,) 은 apply_title 함수에 title 값을 전달하라는 뜻입니다.
+            st.button(
+                "✅ 선택", 
+                key=f"sel_title_{idx}", 
+                on_click=apply_title, 
+                args=(title,), 
+                use_container_width=True
+            )
+    
+    # 목록 닫기 버튼
+    def close_list():
+        st.session_state['title_candidates'] = []
+
+    if st.button("❌ 목록 닫기", on_click=close_list):
+        pass
+
+# --- 기존의 대본 가져오기 기능 (변경 없음) ---
 if 'section_scripts' in st.session_state and st.session_state['section_scripts']:
+    # ... (기존 코드 유지) ...
     intro_text_acc = ""
     main_text_acc = ""
-    for title, text in st.session_state['section_scripts'].items():
-        if "Intro" in title or "도입부" in title:
+    for title_key, text in st.session_state['section_scripts'].items():
+        if "Intro" in title_key or "도입부" in title_key:
             intro_text_acc += text + "\n\n"
         else:
             main_text_acc += text + "\n\n"
             
     st.write("👇 **생성된 대본 가져오기 (클릭 시 아래 입력창에 채워집니다)**")
+    # ... (이하 기존과 동일) ...
     col_get1, col_get2 = st.columns(2)
     if "image_gen_input" not in st.session_state:
         st.session_state["image_gen_input"] = ""
@@ -516,6 +669,7 @@ script_input = st.text_area(
     placeholder="위 버튼을 눌러 대본을 가져오거나, 직접 붙여넣으세요...",
     key="image_gen_input"
 )
+# ... (이하 생성 로직 동일) ...
 
 if 'generated_results' not in st.session_state:
     st.session_state['generated_results'] = []
@@ -547,14 +701,13 @@ if start_btn:
         total_scenes = len(chunks)
         status_box.write(f"✅ {total_scenes}개 장면으로 분할 완료.")
         
-        # 2. 프롬프트 생성 (병렬) - [중요] video_title 인자 전달
+        # 2. 프롬프트 생성 (병렬)
         status_box.write(f"📝 프롬프트 작성 중 ({GEMINI_TEXT_MODEL_NAME}) - 기준 테마: {st.session_state['video_title']}...")
         prompts = []
         with ThreadPoolExecutor(max_workers=10) as executor:
             futures = []
-            current_video_title = st.session_state['video_title'] # 현재 입력된 제목 사용
+            current_video_title = st.session_state['video_title']
             for i, chunk in enumerate(chunks):
-                # generate_prompt 함수에 video_title 전달
                 futures.append(executor.submit(generate_prompt, api_key, i, chunk, style_instruction, current_video_title))
             
             for i, future in enumerate(as_completed(futures)):
@@ -624,5 +777,3 @@ if st.session_state['generated_results']:
                     with open(item['path'], "rb") as file:
                         st.download_button("⬇️ 저장", data=file, file_name=item['filename'], mime="image/png", key=f"btn_down_{item['scene']}")
                 except: st.error("파일 오류")
-
-
