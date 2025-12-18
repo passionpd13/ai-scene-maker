@@ -255,7 +255,7 @@ def create_zip_buffer(source_dir):
 # ==========================================
 with st.sidebar:
     st.header("⚙️ 환경 설정")
-    api_key = st.text_input("🔑 Google API Key", type="password", help="Gemini API 키를 입력하세요.")
+    api_key = st.text_input("🔑 Google API Key : AIzaSyD72pizO1rOmv2Vrl_YpWlLtGRyeM19ZmA", type="password", help="Gemini API 키를 입력하세요.")
     st.markdown("---")
     
     st.subheader("🖼️ 이미지 모델 선택")
@@ -624,3 +624,4 @@ if st.session_state['generated_results']:
                     with open(item['path'], "rb") as file:
                         st.download_button("⬇️ 저장", data=file, file_name=item['filename'], mime="image/png", key=f"btn_down_{item['scene']}")
                 except: st.error("파일 오류")
+
