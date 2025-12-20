@@ -186,6 +186,7 @@ def generate_prompt(api_key, index, text_chunk, style_instruction, video_title):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_TEXT_MODEL_NAME}:generateContent?key={api_key}"
     headers = {'Content-Type': 'application/json'}
 
+    # [수정] 프롬프트를 무조건 한글로 작성하도록 지침 변경
     full_instruction = f"""
     [Role]
     You are an expert AI art director.
@@ -199,9 +200,13 @@ def generate_prompt(api_key, index, text_chunk, style_instruction, video_title):
 
     [Task]
     Create a detailed image generation prompt based on the provided script chunk.
-    Describe the scene visually in English. Focus on the visual elements described in the Style Guideline.
+    Describe the scene visually in KOREAN (Hangul). 
+    Focus on the visual elements described in the Style Guideline.
     Ensure the scene is consistent with the [Overall Context].
-    Output ONLY the prompt text.
+    
+    [Constraint]
+    - The output MUST be written in Korean.
+    - Output ONLY the prompt text.
     """
     
     payload = {
@@ -218,7 +223,7 @@ def generate_prompt(api_key, index, text_chunk, style_instruction, video_title):
             return (scene_num, prompt)
         elif response.status_code == 429:
             time.sleep(2)
-            return (scene_num, f"Scene depicting: {text_chunk}")
+            return (scene_num, f"장면 묘사: {text_chunk}")
         else:
             return (scene_num, f"Error generating prompt: {response.status_code}")
     except Exception as e:
@@ -786,6 +791,7 @@ if st.session_state['generated_results']:
                     with open(item['path'], "rb") as file:
                         st.download_button("⬇️ 저장", data=file, file_name=item['filename'], mime="image/png", key=f"btn_down_{item['scene']}")
                 except: st.error("파일 오류")
+
 
 
 
