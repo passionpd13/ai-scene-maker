@@ -679,13 +679,15 @@ if 'is_processing' not in st.session_state:
 
 start_btn = st.button("🚀 이미지 생성 시작", type="primary", width="stretch")
 
+# ==========================================
+# [수정된 부분] 이미지 생성 실행 로직 (제목 체크 제거됨)
+# ==========================================
 if start_btn:
     if not api_key:
         st.error("⚠️ API Key를 입력해주세요.")
     elif not script_input:
         st.warning("⚠️ 대본을 입력해주세요.")
-    elif not st.session_state['video_title']:
-        st.warning("⚠️ 영상 제목을 설정해주세요. (이미지 생성의 기준이 됩니다)")
+    # [수정] 제목이 없어도 실행되도록 강제 확인 로직(elif)을 삭제했습니다.
     else:
         st.session_state['is_processing'] = True
         st.session_state['generated_results'] = [] 
@@ -702,13 +704,19 @@ if start_btn:
         total_scenes = len(chunks)
         status_box.write(f"✅ {total_scenes}개 장면으로 분할 완료.")
         
+        # [수정] 제목이 비어있을 경우, AI에게 전달할 기본 컨텍스트 설정
+        current_video_title = st.session_state.get('video_title', "").strip()
+        if not current_video_title:
+            current_video_title = "전반적인 대본 분위기에 어울리는 배경 (Context based on the script)"
+
         # 2. 프롬프트 생성 (병렬)
-        status_box.write(f"📝 프롬프트 작성 중 ({GEMINI_TEXT_MODEL_NAME}) - 기준 테마: {st.session_state['video_title']}...")
+        status_box.write(f"📝 프롬프트 작성 중 ({GEMINI_TEXT_MODEL_NAME}) - 기준 테마: {current_video_title}...")
         prompts = []
         with ThreadPoolExecutor(max_workers=10) as executor:
             futures = []
-            current_video_title = st.session_state['video_title']
+            
             for i, chunk in enumerate(chunks):
+                # 수정된 current_video_title 변수를 사용
                 futures.append(executor.submit(generate_prompt, api_key, i, chunk, style_instruction, current_video_title))
             
             for i, future in enumerate(as_completed(futures)):
@@ -751,7 +759,7 @@ if start_btn:
         
         status_box.update(label="✅ 완료되었습니다!", state="complete", expanded=False)
         st.session_state['is_processing'] = False
-
+        
 # 결과창
 if st.session_state['generated_results']:
     st.divider()
@@ -778,6 +786,7 @@ if st.session_state['generated_results']:
                     with open(item['path'], "rb") as file:
                         st.download_button("⬇️ 저장", data=file, file_name=item['filename'], mime="image/png", key=f"btn_down_{item['scene']}")
                 except: st.error("파일 오류")
+
 
 
 
