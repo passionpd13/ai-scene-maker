@@ -506,7 +506,7 @@ if st.session_state['structured_content']:
         st.text_area("아래 내용을 복사하거나 위 버튼을 눌러 저장하세요", value=full_combined_script, height=500)
 
 # ==========================================
-# [수정된 UI] 메인 화면 3: 이미지 생성 (AI 제목 추천 기능)
+# [수정된 UI] 메인 화면 3: 이미지 생성 (제목 유지 버그 수정됨)
 # ==========================================
 st.divider()
 st.title("🎬 AI 씬(장면) 생성기 (Pro)")
@@ -515,7 +515,9 @@ st.caption(f"완성된 대본을 넣으면 장면별 이미지를 생성합니�
 st.subheader("📌 전체 영상 테마(제목) 설정")
 st.caption("이미지 생성 시 이 제목이 '전체적인 분위기 기준'이 됩니다.")
 
-# 제목 추천 결과 저장용 세션
+# [핵심 수정 1] 제목 변수 초기화 (없으면 빈 값으로 생성)
+if 'video_title' not in st.session_state:
+    st.session_state['video_title'] = ""
 if 'title_candidates' not in st.session_state:
     st.session_state['title_candidates'] = []
 
@@ -524,7 +526,7 @@ col_title_input, col_title_btn = st.columns([4, 1])
 with col_title_btn:
     st.write("") 
     st.write("") 
-    # [변경] 단순 가져오기가 아니라 '추천받기'로 변경 (입력값 유무에 따라 로직 분기)
+    # 제목 추천 버튼
     if st.button("💡 제목 5개 추천", help="입력한 제목이 있다면 그것과 비슷하게, 없다면 대본 기반으로 추천합니다.", use_container_width=True):
         if not api_key:
             st.error("API Key 필요")
@@ -534,38 +536,27 @@ with col_title_btn:
             client = genai.Client(api_key=api_key)
             with st.spinner("AI가 최적의 제목을 고민 중입니다..."):
                 
-                # [핵심 로직] 사용자가 처음에 입력한 제목이 있는지 확인
-                user_input_title = st.session_state.get('user_initial_title', '').strip()
+                # 사용자가 입력해둔 값이 있으면 그걸 바탕으로, 없으면 대본 전체로 추천
+                user_input_title = st.session_state['video_title'].strip()
                 
                 if user_input_title:
-                    # Case A: 사용자가 입력한 제목이 있는 경우 -> 변형 추천
                     prompt_instruction = f"""
                     [Target Title]
                     "{user_input_title}"
-
                     [Task]
-                    The user wants to use a title VERY similar to the [Target Title] above.
-                    Generate 5 variations of this title that have the same meaning and nuance but use slightly different catchy words for YouTube.
-                    Do not change the core topic.
+                    Generate 5 variations of this title suitable for YouTube.
                     """
                 else:
-                    # Case B: 입력한 제목이 없는 경우 -> 대본 기반 창작 추천
                     prompt_instruction = f"""
                     [Task]
-                    Read the provided script structure below and generate 5 catchy, clickable YouTube video titles in Korean.
-                    Create the best titles that summarize the content well.
+                    Read the provided script structure and generate 5 catchy YouTube video titles in Korean.
                     """
 
-                # 공통 프롬프트 조립
                 title_prompt = f"""
-                [Role]
-                You are a YouTube viral marketing expert.
-                
+                [Role] You are a YouTube viral marketing expert.
                 {prompt_instruction}
-                
                 [Script Context]
                 {st.session_state['structured_content']}
-                
                 [Output Format]
                 - Output ONLY the list of 5 titles.
                 - No numbering (1., 2.), just 5 lines of text.
@@ -577,57 +568,41 @@ with col_title_btn:
                         model=GEMINI_TEXT_MODEL_NAME, 
                         contents=title_prompt
                     )
-                    # 결과 줄바꿈으로 분리해서 리스트로 저장
                     candidates = [line.strip() for line in resp.text.split('\n') if line.strip()]
-                    # 혹시 모를 번호/특수문자 제거
                     clean_candidates = []
                     import re
                     for c in candidates:
                         clean = re.sub(r'^\d+\.\s*', '', c).replace('*', '').replace('"', '').strip()
                         if clean: clean_candidates.append(clean)
                     
-                    st.session_state['title_candidates'] = clean_candidates[:5] # 최대 5개
+                    st.session_state['title_candidates'] = clean_candidates[:5]
                 except Exception as e:
                     st.error(f"오류 발생: {e}")
 
 with col_title_input:
-    # [수정] 경고창 해결을 위한 상태 동기화 로직
-    
-    # 1. 위젯의 Key가 세션에 아직 없으면, 현재 저장된 제목('video_title')으로 초기화
-    if 'video_title_input_field' not in st.session_state:
-        st.session_state['video_title_input_field'] = st.session_state.get('video_title', "")
-    
-    # 2. 외부(구조 분석 등)에서 'video_title'이 변경되었는데, 위젯 Key에는 반영이 안 된 경우 강제 동기화
-    if st.session_state.get('video_title') != st.session_state.get('video_title_input_field'):
-         st.session_state['video_title_input_field'] = st.session_state.get('video_title', "")
-
-    # 3. text_input 생성 시 'value' 파라미터를 삭제합니다. (Key가 값을 관리하므로 충돌 방지)
-    video_title_input = st.text_input(
+    # [핵심 수정 2] text_input을 session_state['video_title']과 직접 연결
+    # key를 지정하면 입력값이 자동으로 session_state에 저장되고, 
+    # 외부에서 session_state를 바꿔도 입력창에 반영됩니다.
+    st.text_input(
         "영상 제목 (직접 입력하거나 우측 버튼으로 추천받으세요)",
-        key="video_title_input_field" 
+        key="video_title",  # 이 key가 세션 변수명과 일치해야 함
+        placeholder="제목을 입력하면 이미지 생성의 기준이 됩니다."
     )
-    
-    # 4. 사용자가 입력한 값을 다시 메인 변수에 저장
-    st.session_state['video_title'] = video_title_input
 
-# [신규] 추천된 제목들이 있으면 선택 버튼 표시
+# 추천된 제목 선택 버튼 로직
 if st.session_state['title_candidates']:
-    st.info("👇 AI가 추천한 제목입니다. 마음에 드는 것을 클릭하면 적용됩니다.")
+    st.info("👇 AI가 추천한 제목입니다. 클릭하면 적용됩니다.")
 
-    # [중요] 콜백 함수 정의: 버튼 클릭 시 실행될 함수
     def apply_title(new_title):
+        # [핵심 수정 3] 버튼 클릭 시 세션 변수만 업데이트하면 입력창도 자동 변경됨
         st.session_state['video_title'] = new_title
-        st.session_state['video_title_input_field'] = new_title
-        st.session_state['title_candidates'] = []
+        st.session_state['title_candidates'] = [] # 선택 후 목록 닫기
 
-    # 5개의 버튼을 보기 좋게 배치
     for idx, title in enumerate(st.session_state['title_candidates']):
         col_c1, col_c2 = st.columns([4, 1])
         with col_c1:
             st.markdown(f"**{idx+1}. {title}**")
         with col_c2:
-            # [수정] button 안에 on_click 파라미터 사용
-            # args=(title,) 은 apply_title 함수에 title 값을 전달하라는 뜻입니다.
             st.button(
                 "✅ 선택", 
                 key=f"sel_title_{idx}", 
@@ -636,16 +611,12 @@ if st.session_state['title_candidates']:
                 use_container_width=True
             )
     
-    # 목록 닫기 버튼
-    def close_list():
+    if st.button("❌ 목록 닫기"):
         st.session_state['title_candidates'] = []
 
-    if st.button("❌ 목록 닫기", on_click=close_list):
-        pass
-
-# --- 기존의 대본 가져오기 기능 (변경 없음) ---
+# --- 기존 대본 가져오기 및 입력창 ---
+# (이 부분은 이전 코드 흐름과 자연스럽게 이어지도록 유지)
 if 'section_scripts' in st.session_state and st.session_state['section_scripts']:
-    # ... (기존 코드 유지) ...
     intro_text_acc = ""
     main_text_acc = ""
     for title_key, text in st.session_state['section_scripts'].items():
@@ -655,7 +626,7 @@ if 'section_scripts' in st.session_state and st.session_state['section_scripts']
             main_text_acc += text + "\n\n"
             
     st.write("👇 **생성된 대본 가져오기 (클릭 시 아래 입력창에 채워집니다)**")
-    # ... (이하 기존과 동일) ...
+    
     col_get1, col_get2 = st.columns(2)
     if "image_gen_input" not in st.session_state:
         st.session_state["image_gen_input"] = ""
@@ -791,6 +762,7 @@ if st.session_state['generated_results']:
                     with open(item['path'], "rb") as file:
                         st.download_button("⬇️ 저장", data=file, file_name=item['filename'], mime="image/png", key=f"btn_down_{item['scene']}")
                 except: st.error("파일 오류")
+
 
 
 
