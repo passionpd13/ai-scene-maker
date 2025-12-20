@@ -186,31 +186,37 @@ def generate_prompt(api_key, index, text_chunk, style_instruction, video_title):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_TEXT_MODEL_NAME}:generateContent?key={api_key}"
     headers = {'Content-Type': 'application/json'}
 
-    # [수정] 프롬프트를 무조건 한글로 작성하도록 지침 변경
+    # [수정] 지시문(Instruction) 자체를 전부 한글로 변경
     full_instruction = f"""
-    [Role]
-    You are an expert AI art director.
+    [역할]
+    당신은 세계적인 수준의 AI 아트 디렉터입니다.
 
-    [Overall Context / Video Title]
+    [전체 영상 테마 / 제목]
     "{video_title}"
-    (All images must align with this overall theme and atmosphere.)
+    (모든 이미지는 이 전체적인 분위기와 테마를 따라야 합니다.)
 
-    [Style Guideline]
+    [그림 스타일 가이드]
     {style_instruction}
 
-    [Task]
-    Create a detailed image generation prompt based on the provided script chunk.
-    Describe the scene visually in KOREAN (Hangul). 
-    Focus on the visual elements described in the Style Guideline.
-    Ensure the scene is consistent with the [Overall Context].
+    [임무]
+    제공된 대본 조각(Script Segment)을 바탕으로, 이미지 생성 AI에게 입력할 **아주 구체적이고 상세한 묘사 프롬프트**를 작성하십시오.
     
-    [Constraint]
-    - The output MUST be written in Korean.
-    - Output ONLY the prompt text.
+    [길이 및 디테일 제약사항 - 매우 중요]
+    1. **분량 필수:** 반드시 **최소 6문장 이상**으로 길고 풍성하게 작성하십시오. 짧게 요약하지 마십시오.
+    2. **필수 포함 요소:** 분량을 채우기 위해 다음 5가지 요소를 빠짐없이 상상하여 묘사하십시오.
+       - **캐릭터(Character):** 외모, 자세, 구체적인 표정, 의상 디테일
+       - **배경(Background):** 배경에 있는 사물들, 벽의 질감, 바닥 재질, 공간의 깊이감
+       - **조명(Lighting):** 빛의 방향, 빛의 색깔, 그림자의 농도, 빛 갈라짐 효과
+       - **분위기(Atmosphere):** 공기 중의 먼지, 안개, 온도감, 감정적인 무드
+       - **카메라(Camera):** 렌즈 느낌(광각/망원), 카메라 앵글(로우/하이), 초점 영역
+
+    [출력 형식]
+    - **무조건 한국어(한글)**로만 작성하십시오.
+    - 부가적인 설명 없이 **오직 프롬프트 텍스트만** 출력하십시오.
     """
     
     payload = {
-        "contents": [{"parts": [{"text": f"Instruction:\n{full_instruction}\n\nScript Segment:\n\"{text_chunk}\"\n\nImage Prompt:"}]}]
+        "contents": [{"parts": [{"text": f"지시사항(Instruction):\n{full_instruction}\n\n대본 내용(Script Segment):\n\"{text_chunk}\"\n\n이미지 프롬프트 결과:"}]}]
     }
 
     try:
@@ -292,6 +298,7 @@ with st.sidebar:
 너무 어지럽지 않게, 글씨는 핵심 키워드 2~3만 나오게 한다
 글씨가 너무 많지 않게 핵심만. 2D 스틱맨을 활용해 대본을 설명이 잘되게 설명하는 연출을 한다. 자막 스타일 연출은 하지 않는다.
 글씨가 나올경우 핵심 키워드 중심으로만 나오게 너무 글이 많지 않도록 한다, 글자는 배경과 서물에 자연스럽게 연출, 전체 배경 연출은 2D로 디테일하게 몰입감 있게 연출해서 그려줘 (16:9)
+다양한 장소와 상황 연출로 배경을 디테일하게 한다.
     """
     style_instruction = st.text_area("AI에게 지시할 그림 스타일", value=default_style.strip(), height=200)
     st.markdown("---")
@@ -762,6 +769,7 @@ if st.session_state['generated_results']:
                     with open(item['path'], "rb") as file:
                         st.download_button("⬇️ 저장", data=file, file_name=item['filename'], mime="image/png", key=f"btn_down_{item['scene']}")
                 except: st.error("파일 오류")
+
 
 
 
